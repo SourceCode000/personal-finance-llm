@@ -1,0 +1,32 @@
+# --- Virtual Environments ---
+.venv/
+venv/
+env/
+bin/
+lib/
+develop-eggs/
+
+# --- Python Cache & Compiled Files ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# --- Distribution & Build ---
+dist/
+build/
+*.egg-info/
+*.spec
+
+# --- Environment Variables (Secret Keys) ---
+.env
+.venv
+*.sh
+
+# --- IDE & Editor Settings ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
