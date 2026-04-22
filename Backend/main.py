@@ -1,23 +1,27 @@
 # backend/main.py
 
-from fastapi import FastAPI
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from groq import Groq
+from groq import Groq, APIError
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
-app = FastAPI()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    raise RuntimeError("GROQ_API_KEY not set — add it to Backend/.env")
 
-# Allow frontend to talk to backend
+app = FastAPI(title="Personal Finance Assistant")
+client = Groq(api_key=api_key)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 SYSTEM_PROMPT = """
@@ -50,28 +54,41 @@ IMPORTANT:
 - You are not a licensed financial advisor
 """
 
+
+class Message(BaseModel):
+    role: str
+    content: str
+
+
 class ChatRequest(BaseModel):
-    messages: list
+    messages: list[Message]
+
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
+    full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + [
+        m.model_dump() for m in request.messages
+    ]
 
-    # Build full message list with system prompt
-    full_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ] + request.messages
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=full_messages,
+            max_tokens=500,
+            temperature=0.7,
+        )
+    except APIError as e:
+        raise HTTPException(status_code=502, detail=f"AI service error: {e.message}")
 
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=full_messages,
-        max_tokens=500,       # keep responses concise
-        temperature=0.7       # some creativity but not too random
-    )
+    return {"response": response.choices[0].message.content}
 
-    return {
-        "response": response.choices[0].message.content
-    }
 
 @app.get("/")
 async def root():
     return {"status": "running"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
